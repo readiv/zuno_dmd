@@ -21,7 +21,7 @@ byte sw_2 = 10; // Выключатель // 0 - одно состояние // 
 
 long previousMillis = 0;        // храним время последней отправки zuno
 long interval = 30000;           // интервал между отправками данных в сеть z-wabe
-bool flag_send_zreport = false;
+byte flag_send_zreport = 0;
 
 ZUNO_SETUP_CHANNELS(
   ZUNO_SWITCH_BINARY(led_1_Getter, led_1_Setter),
@@ -51,11 +51,11 @@ void setup() {
   delay(1000); //На всякий случай // свет моргнет при инициализации на это время
 }
 
-void set_flag_send_zreport() {
-    if (not flag_send_zreport) {
-      previousMillis = millis() - interval + 300; // Отправить zunoSendReport по всем каналам через 300 милисекунд
-      flag_send_zreport = true;
-    }    
+void set_flag_send_zreport(byte ch) { 
+    if (flag_send_zreport == 0) {
+      previousMillis = millis() - interval + 300; // Отправить zunoSendReport по всем каналам через 300 милисекунд  
+    }
+    flag_send_zreport = (ch <= 2) ? (flag_send_zreport | 3) : (flag_send_zreport | (1 << (ch - 1)));      
 }
 
 void loop() {
@@ -78,12 +78,12 @@ void loop() {
   
   if (new_led_1 != led_1) { //Если новое состояние не равно старому
     led_1 = new_led_1;
-    set_flag_send_zreport();
+    set_flag_send_zreport(1);
   }
 
   if (new_led_2 != led_2) { //Если новое состояние не равно старому
     led_2 = new_led_2;
-    set_flag_send_zreport();
+    set_flag_send_zreport(2);
   }
 
   if (z_led_1 != 10) { //Поступила комманда от z-wave на кнопку 1
@@ -96,7 +96,7 @@ void loop() {
     } else { // Если на прошлой интерации переключилось то сброс
       z_led_1 = 10; 
       attempts_led_1 = 0;
-      set_flag_send_zreport(); 
+      set_flag_send_zreport(1); 
     } 
   }
 
@@ -110,29 +110,32 @@ void loop() {
     } else { // Если на прошлой интерации переключилось то сброс
       z_led_2 = 10; 
       attempts_led_2 = 0;
-      set_flag_send_zreport(); 
+      set_flag_send_zreport(2); 
     } 
   }
   
   if (new_sw_1 != sw_1) { // Нажали выключатель 1 
     digitalWrite(pin_rellay_1, (digitalRead(pin_rellay_1) == 0) ? HIGH : LOW);
     sw_1 = new_sw_1;
-    set_flag_send_zreport(); 
+    set_flag_send_zreport(3); 
   }
 
   if (new_sw_2 != sw_2) { // Нажали выключатель 2
     digitalWrite(pin_rellay_2, (digitalRead(pin_rellay_2) == 0) ? HIGH : LOW);
     sw_2 = new_sw_2;
-    set_flag_send_zreport();
+    set_flag_send_zreport(4);
   }
 
   if(millis() > previousMillis + interval) { // Отправка состояния каждые interval секунд
     previousMillis = millis();
-    flag_send_zreport = false; //флаг сбрасываем в любом случае
-    for (byte i=1; i <= 4; i++){
-      zunoSendReport(i);
-      delay(20); 
+    Serial.println(flag_send_zreport);
+    for (byte i = 0; i <= 3; i++){
+      if (flag_send_zreport & (1 << i) != 0) {   
+        zunoSendReport(i+1);
+        delay(20); 
+      }
     }
+    flag_send_zreport = 0; //флаг сбрасываем в любом случае
   }
   
 }
